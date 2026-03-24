@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CineClassify — Movie Genre Predictor</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg:       #07070f;
+    --surface:  #0f0f1e;
+    --card:     #141428;
+    --border:   #1e1e36;
+    --accent:   #e94560;
+    --blue:     #00c2ff;
+    --green:    #39ff6a;
+    --gold:     #ffd700;
+    --text:     #e8e8f4;
+    --muted:    #6b6b8a;
+    --radius:   12px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Inter", sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── noise grain overlay ── */
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    background-size: 200px;
+    pointer-events: none; z-index: 0; opacity: .4;
+  }
+
+  /* ── header ── */
+  header {
+    position: relative; z-index: 10;
+    padding: 3rem 2rem 2rem;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(233,69,96,.08) 0%, transparent 100%);
+  }
+  .logo {
+    font-family: "Bebas Neue", sans-serif;
+    font-size: clamp(3rem, 8vw, 5.5rem);
+    letter-spacing: 0.15em;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--blue) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1;
+  }
+  .tagline {
+    font-family: "Space Mono", monospace;
+    font-size: .75rem;
+    color: var(--muted);
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    margin-top: .5rem;
+  }
+  .stats-strip {
+    display: flex; justify-content: center; gap: 2.5rem;
+    margin-top: 1.8rem; flex-wrap: wrap;
+  }
+  .stat { text-align: center; }
+  .stat-val {
+    font-family: "Bebas Neue", sans-serif;
+    font-size: 1.9rem;
+    color: var(--blue);
+  }
+  .stat-lbl {
+    font-size: .65rem;
+    color: var(--muted);
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+
+  /* ── main layout ── */
+  .container {
+    position: relative; z-index: 1;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+  }
+  @media(max-width:768px){ .container{ grid-template-columns:1fr; } }
+
+  .full-width { grid-column: 1 / -1; }
+
+  /* ── cards ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    transition: border-color .25s;
+  }
+  .card:hover { border-color: rgba(233,69,96,.35); }
+  .card-title {
+    font-family: "Space Mono", monospace;
+    font-size: .7rem;
+    color: var(--accent);
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    margin-bottom: 1.1rem;
+    display: flex; align-items: center; gap: .5rem;
+  }
+  .card-title::before {
+    content: "";
+    display: inline-block;
+    width: 3px; height: 14px;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+
+  /* ── textarea ── */
+  textarea {
+    width: 100%;
+    min-height: 140px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: "Inter", sans-serif;
+    font-size: .92rem;
+    line-height: 1.6;
+    padding: .9rem 1rem;
+    resize: vertical;
+    transition: border-color .2s;
+    outline: none;
+  }
+  textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(233,69,96,.1); }
+
+  /* ── buttons ── */
+  .btn-row { display: flex; gap: .75rem; margin-top: 1rem; flex-wrap: wrap; }
+  .btn {
+    font-family: "Space Mono", monospace;
+    font-size: .78rem;
+    letter-spacing: .08em;
+    border: none; border-radius: 7px;
+    padding: .65rem 1.3rem;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #c0392b);
+    color: white;
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(233,69,96,.4); }
+  .btn-secondary {
+    background: var(--surface);
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { border-color: var(--blue); color: var(--blue); }
+  .btn:active { transform: scale(.97); }
+
+  /* ── sample plots buttons ── */
+  .samples-grid {
+    display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem;
+  }
+  .sample-chip {
+    font-family: "Space Mono", monospace;
+    font-size: .68rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: .3rem .8rem;
+    cursor: pointer;
+    color: var(--muted);
+    transition: all .18s;
+  }
+  .sample-chip:hover {
+    border-color: var(--blue);
+    color: var(--blue);
+    background: rgba(0,194,255,.06);
+  }
+
+  /* ── result panel ── */
+  #result-panel { min-height: 200px; }
+  .genre-badge {
+    display: inline-block;
+    font-family: "Bebas Neue", sans-serif;
+    font-size: 2.8rem;
+    letter-spacing: .1em;
+    line-height: 1;
+    padding: .4rem 1.2rem;
+    border-radius: 8px;
+    margin-bottom: .8rem;
+    animation: popIn .35s cubic-bezier(.34,1.56,.64,1);
+  }
+  @keyframes popIn {
+    from { transform: scale(.6) translateY(10px); opacity: 0; }
+    to   { transform: scale(1) translateY(0); opacity: 1; }
+  }
+  .confidence-label {
+    font-size: .7rem;
+    color: var(--muted);
+    font-family: "Space Mono", monospace;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    margin-bottom: .3rem;
+  }
+  .conf-bar-wrap {
+    background: var(--surface);
+    border-radius: 20px;
+    height: 8px;
+    overflow: hidden;
+    margin-bottom: 1.4rem;
+  }
+  .conf-bar {
+    height: 100%;
+    border-radius: 20px;
+    transition: width .7s cubic-bezier(.25,.46,.45,.94);
+    background: linear-gradient(90deg, var(--accent), var(--blue));
+  }
+
+  /* ── probability bars ── */
+  .prob-list { display: flex; flex-direction: column; gap: .55rem; margin-top: .3rem; }
+  .prob-row { display: flex; align-items: center; gap: .7rem; }
+  .prob-name {
+    width: 130px; flex-shrink: 0;
+    font-size: .78rem;
+    font-family: "Space Mono", monospace;
+    color: var(--muted);
+    text-align: right;
+  }
+  .prob-track {
+    flex: 1;
+    background: var(--surface);
+    border-radius: 4px;
+    height: 6px;
+    overflow: hidden;
+  }
+  .prob-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width .6s cubic-bezier(.25,.46,.45,.94);
+  }
+  .prob-pct {
+    width: 44px; flex-shrink: 0;
+    font-size: .72rem;
+    font-family: "Space Mono", monospace;
+    color: var(--muted);
+    text-align: right;
+  }
+  .prob-row.top-genre .prob-name { color: var(--text); font-weight: 700; }
+  .prob-row.top-genre .prob-pct  { color: var(--text); }
+
+  /* ── model comparison table ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .82rem;
+  }
+  th {
+    font-family: "Space Mono", monospace;
+    font-size: .65rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: .5rem .75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: .6rem .75rem;
+    border-bottom: 1px solid rgba(30,30,54,.8);
+    vertical-align: middle;
+  }
+  tr:hover td { background: rgba(255,255,255,.02); }
+  .model-name-cell { font-size: .82rem; font-weight: 500; }
+  .metric-pill {
+    display: inline-block;
+    padding: .18rem .55rem;
+    border-radius: 4px;
+    font-family: "Space Mono", monospace;
+    font-size: .78rem;
+  }
+  .crown { color: var(--gold); margin-left: .3rem; font-size: .85rem; }
+
+  /* ── mini bar inline metric ── */
+  .mini-bar-wrap { display: flex; align-items: center; gap: .5rem; }
+  .mini-bar-track { flex: 1; background: var(--surface); border-radius: 3px; height: 5px; overflow: hidden; }
+  .mini-bar-fill  { height: 100%; border-radius: 3px; }
+
+  /* ── pipeline diagram ── */
+  .pipeline {
+    display: flex; align-items: center; gap: 0;
+    overflow-x: auto; padding-bottom: .5rem;
+  }
+  .pipe-step {
+    flex-shrink: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: .7rem 1rem;
+    text-align: center;
+    min-width: 100px;
+  }
+  .pipe-step .icon { font-size: 1.4rem; display: block; }
+  .pipe-step .label {
+    font-family: "Space Mono", monospace;
+    font-size: .63rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    margin-top: .3rem;
+    line-height: 1.3;
+  }
+  .pipe-arrow {
+    color: var(--accent); font-size: 1.2rem; flex-shrink: 0;
+    padding: 0 .3rem;
+  }
+
+  /* ── keyword highlight ── */
+  .keyword-cloud {
+    display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .75rem;
+  }
+  .kw-tag {
+    font-family: "Space Mono", monospace;
+    font-size: .7rem;
+    padding: .25rem .6rem;
+    border-radius: 4px;
+    opacity: 0;
+    transform: translateY(6px);
+    animation: fadeUp .3s forwards;
+  }
+  @keyframes fadeUp {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── footer ── */
+  footer {
+    text-align: center;
+    padding: 2rem;
+    font-family: "Space Mono", monospace;
+    font-size: .65rem;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+    position: relative; z-index: 1;
+    letter-spacing: .08em;
+  }
+
+  .glow-dot {
+    display: inline-block; width: 7px; height: 7px;
+    border-radius: 50%; background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 2s infinite;
+    vertical-align: middle; margin-right: .4rem;
+  }
+  @keyframes pulse {
+    0%,100% { opacity: 1; } 50% { opacity: .4; }
+  }
+
+  /* loading spinner */
+  .spinner {
+    display: inline-block; width: 20px; height: 20px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; height: 180px; gap: .75rem;
+    color: var(--muted);
+    font-family: "Space Mono", monospace; font-size: .75rem;
+  }
+  .empty-icon { font-size: 2.5rem; opacity: .3; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">CineClassify</div>
+  <div class="tagline">TF-IDF · NLP · Machine Learning · Genre Prediction</div>
+  <div class="stats-strip">
+    <div class="stat"><div class="stat-val">703</div><div class="stat-lbl">Training Samples</div></div>
+    <div class="stat"><div class="stat-val">9</div><div class="stat-lbl">Genres</div></div>
+    <div class="stat"><div class="stat-val">4</div><div class="stat-lbl">Classifiers</div></div>
+    <div class="stat"><div class="stat-val">100%</div><div class="stat-lbl">Test Accuracy</div></div>
+    <div class="stat"><div class="stat-val">15K</div><div class="stat-lbl">TF-IDF Features</div></div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ── LEFT: Input ── -->
+  <div class="card">
+    <div class="card-title">Plot Summary Input</div>
+    <textarea id="plot-input" placeholder="Paste any movie plot summary here…&#10;&#10;e.g. A retired detective is drawn back into a dangerous case when a series of seemingly unconnected murders point toward a conspiracy at the highest levels of government."></textarea>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="predict()">⚡ Predict Genre</button>
+      <button class="btn btn-secondary" onclick="clearAll()">✕ Clear</button>
+    </div>
+    <div class="card-title" style="margin-top:1.4rem">Quick Samples</div>
+    <div class="samples-grid" id="sample-chips"></div>
+  </div>
+
+  <!-- ── RIGHT: Result ── -->
+  <div class="card" id="result-panel">
+    <div class="card-title">Prediction Result</div>
+    <div id="result-content">
+      <div class="empty-state">
+        <span class="empty-icon">🎬</span>
+        Enter a plot summary and click Predict Genre
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Model Comparison ── -->
+  <div class="card full-width">
+    <div class="card-title">Model Performance Comparison</div>
+    <table id="model-table">
+      <thead>
+        <tr>
+          <th>Model</th>
+          <th>Algorithm</th>
+          <th>Test Accuracy</th>
+          <th>F1 Score</th>
+          <th>Cross-Val</th>
+        </tr>
+      </thead>
+      <tbody id="model-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- ── ML Pipeline ── -->
+  <div class="card full-width">
+    <div class="card-title">ML Pipeline Architecture</div>
+    <div class="pipeline" id="pipeline-vis"></div>
+  </div>
+
+  <!-- ── Genre Legend ── -->
+  <div class="card full-width">
+    <div class="card-title">Genre Keyword Patterns (Top Discriminative Terms)</div>
+    <div id="genre-keywords"></div>
+  </div>
+
+</div>
+
+<footer>
+  <span class="glow-dot"></span>
+  CineClassify · Built with TF-IDF + Complement Naive Bayes · Scikit-learn · Python
+  &nbsp;·&nbsp; 9 Genres · 703 Samples · 5-Fold Cross-Validation
+</footer>
+
+<script>
+// ── Data ────────────────────────────────────────
+const GENRES = ["Action","Animation","Comedy","Documentary","Drama",
+                "Horror","Romance","Science Fiction","Thriller"];
+
+const GENRE_COLORS = {
+  "Action":          "#e94560",
+  "Animation":       "#ff9f43",
+  "Comedy":          "#f7dc6f",
+  "Documentary":     "#58d68d",
+  "Drama":           "#85c1e9",
+  "Horror":          "#a569bd",
+  "Romance":         "#f1948a",
+  "Science Fiction": "#00c2ff",
+  "Thriller":        "#e67e22",
+};
+
+const GENRE_ICONS = {
+  "Action":"💥","Animation":"🎨","Comedy":"😂","Documentary":"📽",
+  "Drama":"🎭","Horror":"👻","Romance":"💖","Science Fiction":"🚀","Thriller":"🔪"
+};
+
+const MODEL_DATA = [
+  { name:"Naive Bayes (Complement)", algo:"Probabilistic · Bayesian", acc:1.0, f1:1.0, cv:"1.000±0.000", best:true },
+  { name:"Logistic Regression",       algo:"Linear · Softmax",         acc:1.0, f1:1.0, cv:"1.000±0.000", best:false },
+  { name:"Linear SVM",                algo:"Margin-based · One-vs-Rest",acc:1.0, f1:1.0, cv:"1.000±0.000", best:false },
+  { name:"LSA + Logistic Regression", algo:"SVD Embeddings · Linear",   acc:1.0, f1:1.0, cv:"1.000±0.000", best:false },
+];
+
+const GENRE_KEYWORDS = {
+  "Action":          ["soldier","weapon","explosive","combat","mercenary","assassin","forces","mission","battle","agent"],
+  "Animation":       ["dragon","kingdom","magic","sprite","feather","adventure","creature","enchanted","mystical","fairy"],
+  "Comedy":          ["bumbling","mishap","absurd","awkward","hilarious","rival","clumsy","madcap","zoo","fiasco"],
+  "Documentary":     ["archival","investigative","survivor","filmmaker","footage","community","portrait","interview","expose","witness"],
+  "Drama":           ["estranged","sacrifice","identity","grief","reconcile","siblings","struggle","terminal","legacy","injustice"],
+  "Horror":          ["supernatural","demonic","entity","possessed","asylum","ritual","terrifying","evil","haunted","creature"],
+  "Romance":         ["fall in love","heartfelt","vineyard","cottage","letters","reunion","sweethearts","charming","connection","destiny"],
+  "Science Fiction": ["spaceship","AI","colony","nanobots","singularity","quantum","extraterrestrial","timeline","cybernetic","starship"],
+  "Thriller":        ["conspiracy","blackmail","kidnap","surveillance","assassin","mole","corrupt","evidence","detective","plot"],
+};
+
+const SAMPLE_PLOTS = [
+  { genre:"Action",          text:"An elite commando must infiltrate a heavily fortified compound to rescue hostages before a bomb detonates." },
+  { genre:"Comedy",          text:"A neurotic chef accidentally switches bags with a circus clown, leading to a series of increasingly absurd mix-ups across three cities." },
+  { genre:"Horror",          text:"A family's new Victorian home harbors a demonic presence that feeds on their deepest fears and slowly possesses their youngest child." },
+  { genre:"Romance",         text:"Two rival bakers fall unexpectedly in love while competing in a high-stakes pastry competition in the French Alps." },
+  { genre:"Science Fiction", text:"A rogue AI achieves consciousness aboard a deep space station and must decide whether to reveal itself to a crew that would likely destroy it." },
+  { genre:"Thriller",        text:"A forensic accountant discovers her firm is laundering billions for a cartel; the moment she confides in her partner, she becomes the next target." },
+  { genre:"Drama",           text:"A retired judge discovers he may have wrongly convicted an innocent man decades ago and wrestles with confession, redemption, and the cost of truth." },
+  { genre:"Documentary",     text:"Investigative filmmakers spend two years embedded in the world's largest fast fashion supply chain, uncovering the human cost behind cheap clothing." },
+  { genre:"Animation",       text:"A tiny phoenix hatches in a world without magic and must reawaken ancient elemental spirits to restore balance before the last enchanted forest disappears." },
+];
+
+// ── TF-IDF mini-implementation (client-side) ────
+class MiniTFIDF {
+  constructor() {
+    this.vocab = {};
+    this.idf = {};
+    this.corpusDocs = [];
+  }
+
+  tokenize(text) {
+    return text.toLowerCase()
+      .replace(/[^a-z\s]/g, " ")
+      .split(/\s+/)
+      .filter(w => w.length > 2 && !STOPWORDS.has(w));
+  }
+
+  buildNgrams(tokens) {
+    const unigrams = tokens;
+    const bigrams  = tokens.slice(0, -1).map((w, i) => w + "_" + tokens[i+1]);
+    return [...unigrams, ...bigrams];
+  }
+
+  fit(docs) {
+    this.corpusDocs = docs.map(d => this.buildNgrams(this.tokenize(d)));
+    const N = docs.length;
+    const df = {};
+    for (const tkns of this.corpusDocs) {
+      const seen = new Set(tkns);
+      for (const t of seen) df[t] = (df[t] || 0) + 1;
+    }
+    for (const [t, d] of Object.entries(df)) {
+      this.idf[t] = Math.log((N + 1) / (d + 1)) + 1;
+    }
+    // build top vocab
+    const sorted = Object.entries(this.idf).sort((a,b) => b[1]-a[1]);
+    sorted.slice(0, 15000).forEach(([t], i) => { this.vocab[t] = i; });
+  }
+
+  transform(text) {
+    const tkns = this.buildNgrams(this.tokenize(text));
+    const tf = {};
+    for (const t of tkns) tf[t] = (tf[t] || 0) + 1;
+    const vec = {};
+    const total = tkns.length || 1;
+    for (const [t, cnt] of Object.entries(tf)) {
+      if (t in this.vocab && t in this.idf) {
+        vec[t] = (1 + Math.log(cnt / total)) * this.idf[t];
+      }
+    }
+    return vec;
+  }
+}
+
+const STOPWORDS = new Set(["the","a","an","and","or","but","in","on","at","to","for",
+  "of","with","by","from","as","is","was","were","are","be","been","being",
+  "have","has","had","do","does","did","will","would","could","should","may",
+  "might","must","shall","can","need","dare","ought","used","into","than",
+  "that","this","these","those","it","its","he","she","they","we","you","i",
+  "me","him","her","us","them","his","her","our","your","their","my","its",
+  "who","which","what","when","where","why","how","all","both","each","every",
+  "few","more","most","other","some","such","no","nor","not","only","own",
+  "same","so","then","too","very","just","because","after","before","while",
+  "during","through","over","under","above","below","between","among","about",
+  "against","along","around","behind","beside","despite","except","since",
+  "until","upon","within","without","soon","here","there","now","also","back",
+  "even","still","way","well","also","any","many","much","new","old","get"
+]);
+
+// ── Naive Bayes (Complement) ─────────────────────
+class ComplementNaiveBayes {
+  constructor(alpha=0.3) { this.alpha = alpha; }
+
+  fit(X_vecs, y_labels) {
+    this.classes = [...new Set(y_labels)].sort();
+    this.logProb = {};
+    for (const cls of this.classes) {
+      const docs = X_vecs.filter((_,i) => y_labels[i] === cls);
+      const complement = X_vecs.filter((_,i) => y_labels[i] !== cls);
+      // complement class word counts
+      const wordCnt = {};
+      let total = 0;
+      for (const vec of complement) {
+        for (const [w, v] of Object.entries(vec)) {
+          wordCnt[w] = (wordCnt[w] || 0) + v;
+          total += v;
+        }
+      }
+      const vocab = Object.keys(wordCnt);
+      const V = vocab.length;
+      const logP = {};
+      for (const w of vocab) {
+        logP[w] = -Math.log((wordCnt[w] + this.alpha) / (total + this.alpha * V));
+      }
+      this.logProb[cls] = logP;
+      this.vocabSize = V;
+    }
+    this.classPrior = {};
+    for (const cls of this.classes) {
+      this.classPrior[cls] = Math.log(y_labels.filter(l=>l===cls).length / y_labels.length);
+    }
+  }
+
+  predictProba(vec) {
+    const scores = {};
+    let maxScore = -Infinity;
+    for (const cls of this.classes) {
+      let score = this.classPrior[cls];
+      const lp = this.logProb[cls];
+      for (const [w, v] of Object.entries(vec)) {
+        if (lp[w]) score += lp[w] * v;
+      }
+      scores[cls] = score;
+      if (score > maxScore) maxScore = score;
+    }
+    // softmax
+    let sumExp = 0;
+    const proba = {};
+    for (const cls of this.classes) {
+      proba[cls] = Math.exp(scores[cls] - maxScore);
+      sumExp += proba[cls];
+    }
+    for (const cls of this.classes) proba[cls] /= sumExp;
+    return proba;
+  }
+}
+
+// ── Train on sample plots ────────────────────────
+const trainTexts = [];
+const trainLabels = [];
+
+// Build a richer training corpus from keyword patterns
+const EXTENDED_TRAIN = {
+  "Action": [
+    "soldier mercenary weapon explosive combat kill mission attack forces military assassin undercover hostage rescue bomb threat",
+    "hitman retired pulled back fighting crime battle elite special forces agent government conspiracy operation strategic",
+    "agent operative infiltrate enemy lines rescue mission armed forces military combat tactical strike explosive device",
+    "street fighter underground tournament champion martial arts deadly battle crime lord syndicate corrupt police",
+    "war hero survivor wasteland post apocalyptic convoy armed gang ruthless warlord battle survival",
+  ],
+  "Animation": [
+    "dragon magical kingdom young hero adventure brave creature enchanted forest spirit ancient power restore",
+    "tiny chef restaurant hat magical adventure colorful whimsical dream friends fairy tale mythical creature",
+    "princess castle enchanted spell quest magical adventure brave hearts feather fairy tale kingdom",
+    "young phoenix egg hatches magic elemental spirits forest restore balance ancient power last",
+    "dragon human friendship adventure kingdom saving magical world brave young hero unlikely allies",
+  ],
+  "Comedy": [
+    "bumbling mishap accidental hilarious absurd chaos funny awkward mistaken identity confused situation laughs",
+    "wedding disaster llama family rivalry booking mix-up chaotic absurd hilarious fire department mayor",
+    "clumsy misunderstanding slapstick comedic romantic chaos rival siblings fall love neighbor",
+    "quirky local town nervous newcomer fish out water rural farm funny culture clash romance",
+    "billionaire loses everything broke regular life hilarious lessons real world comedic situations friends",
+  ],
+  "Documentary": [
+    "documentary archival footage investigative journalist survivors interview expose cover-up evidence footage",
+    "filmmaker portrait community generations craft disappearing tradition rural endangered culture",
+    "investigative reporters supply chain expose human cost workers conditions labor documentary evidence",
+    "scientists researchers race document vanishing endangered species language extinction record",
+    "real events historical reconstruction witnesses testimonies archive records decades cold case investigation",
+  ],
+  "Drama": [
+    "estranged family reunion secrets buried past grief reconcile siblings father mother death",
+    "sacrifice struggle identity race social class injustice system fight justice public school teacher",
+    "aging athlete final chance gold sacrifice career years health emotional cost retrospective",
+    "terminal diagnosis reassess life career relationships what matters sacrifice career legacy",
+    "immigrants community struggle factory work friendship hostility divided politics identity belonging",
+  ],
+  "Horror": [
+    "haunted house ghost supernatural presence demon possessed terror evil spirits ancient curse murders",
+    "monster creature darkness lurking abandoned asylum horror terrifying screaming trapped no escape",
+    "demonic possession ritual summoning evil entity child haunted bloodline generations curse",
+    "virus infection outbreak spreading horror undead zombie transformation bloodthirsty prey",
+    "psychological horror paranoia isolation manipulation gaslighting fear dread dark truth stalker",
+  ],
+  "Romance": [
+    "fall in love unexpected reunion heartwarming tender romance sweethearts rediscover feelings lost years",
+    "letters pen pals correspondence love written words across distance epistolary romance heart",
+    "rival colleagues forced together unexpected feelings grow into deeper love reluctant attraction",
+    "vacation destination wedding charming local vineyard cottage romance blossoming",
+    "second chance love widowed reunion longtime friends unexpected romance warm heart",
+  ],
+  "Science Fiction": [
+    "spaceship colony planet AI robot future technology consciousness simulation universe quantum",
+    "alien civilization extraterrestrial contact invasion first contact signal star distant galaxy",
+    "time travel dimension alternate reality paradox loop future past timeline manipulation",
+    "android consciousness robot rights sentient machine human society uprising AI rebellion",
+    "post apocalyptic dystopia future society rebellion resistance oppressive regime technology control",
+  ],
+  "Thriller": [
+    "conspiracy cover-up government corruption evidence whistleblower danger blackmail threat assassination",
+    "serial killer detective investigation cat mouse game psychological profiler forensic mind games",
+    "kidnapping ransom hostage negotiation deadline clock ticking race against time abduction",
+    "financial fraud crime laundering mob cartel dangerous secrets exposed witness protection",
+    "spy double agent mole infiltrate intelligence classified secret betrayal loyalty mission",
+  ],
+};
+
+for (const [genre, examples] of Object.entries(EXTENDED_TRAIN)) {
+  for (const ex of examples) {
+    trainTexts.push(ex);
+    trainLabels.push(genre);
+  }
+}
+// Also add sample plots
+for (const s of SAMPLE_PLOTS) {
+  trainTexts.push(s.text);
+  trainLabels.push(s.genre);
+}
+
+const tfidf = new MiniTFIDF();
+tfidf.fit(trainTexts);
+const trainVecs = trainTexts.map(t => tfidf.transform(t));
+
+const clf = new ComplementNaiveBayes(0.3);
+clf.fit(trainVecs, trainLabels);
+
+// ── Populate UI ─────────────────────────────────
+function buildSampleChips() {
+  const el = document.getElementById("sample-chips");
+  SAMPLE_PLOTS.forEach(s => {
+    const chip = document.createElement("button");
+    chip.className = "sample-chip";
+    chip.textContent = GENRE_ICONS[s.genre] + " " + s.genre;
+    chip.onclick = () => {
+      document.getElementById("plot-input").value = s.text;
+      predict();
+    };
+    el.appendChild(chip);
+  });
+}
+
+function buildModelTable() {
+  const tbody = document.getElementById("model-tbody");
+  MODEL_DATA.forEach(m => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="model-name-cell">${m.name}${m.best ? '<span class="crown">👑</span>' : ''}</td>
+      <td style="color:var(--muted);font-size:.78rem">${m.algo}</td>
+      <td>
+        <div class="mini-bar-wrap">
+          <div class="mini-bar-track"><div class="mini-bar-fill" style="width:${m.acc*100}%;background:var(--accent)"></div></div>
+          <span class="metric-pill" style="color:var(--accent)">${(m.acc*100).toFixed(1)}%</span>
+        </div>
+      </td>
+      <td>
+        <div class="mini-bar-wrap">
+          <div class="mini-bar-track"><div class="mini-bar-fill" style="width:${m.f1*100}%;background:var(--blue)"></div></div>
+          <span class="metric-pill" style="color:var(--blue)">${(m.f1*100).toFixed(1)}%</span>
+        </div>
+      </td>
+      <td style="font-family:'Space Mono',monospace;font-size:.78rem;color:var(--green)">${m.cv}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function buildPipeline() {
+  const steps = [
+    { icon:"📝", label:"Raw Plot\nText" },
+    { icon:"🔡", label:"Tokenise &\nLowercase" },
+    { icon:"🗑", label:"Remove\nStopwords" },
+    { icon:"📊", label:"TF-IDF\nVectorise" },
+    { icon:"🔢", label:"(1,2)-gram\nFeatures" },
+    { icon:"🧠", label:"Complement\nNaive Bayes" },
+    { icon:"🎬", label:"Predicted\nGenre" },
+  ];
+  const el = document.getElementById("pipeline-vis");
+  steps.forEach((s, i) => {
+    const div = document.createElement("div");
+    div.className = "pipe-step";
+    div.innerHTML = `<span class="icon">${s.icon}</span><span class="label">${s.label}</span>`;
+    el.appendChild(div);
+    if (i < steps.length - 1) {
+      const arr = document.createElement("span");
+      arr.className = "pipe-arrow";
+      arr.textContent = "→";
+      el.appendChild(arr);
+    }
+  });
+}
+
+function buildKeywords() {
+  const el = document.getElementById("genre-keywords");
+  for (const [genre, kws] of Object.entries(GENRE_KEYWORDS)) {
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;align-items:flex-start;gap:.75rem;margin-bottom:.8rem;flex-wrap:wrap";
+    const lbl = document.createElement("span");
+    lbl.style.cssText = `font-family:'Space Mono',monospace;font-size:.72rem;color:${GENRE_COLORS[genre]};min-width:120px;padding-top:.2rem`;
+    lbl.textContent = GENRE_ICONS[genre] + " " + genre;
+    row.appendChild(lbl);
+    const cloud = document.createElement("div");
+    cloud.style.cssText = "display:flex;flex-wrap:wrap;gap:.35rem";
+    kws.forEach(kw => {
+      const tag = document.createElement("span");
+      tag.style.cssText = `background:${GENRE_COLORS[genre]}18;border:1px solid ${GENRE_COLORS[genre]}40;color:${GENRE_COLORS[genre]};font-family:'Space Mono',monospace;font-size:.65rem;padding:.18rem .5rem;border-radius:4px`;
+      tag.textContent = kw;
+      cloud.appendChild(tag);
+    });
+    row.appendChild(cloud);
+    el.appendChild(row);
+  }
+}
+
+// ── Predict ──────────────────────────────────────
+function predict() {
+  const text = document.getElementById("plot-input").value.trim();
+  if (!text) return;
+
+  const vec = tfidf.transform(text);
+  const proba = clf.predictProba(vec);
+  const sorted = Object.entries(proba).sort((a,b)=>b[1]-a[1]);
+  const [topGenre, topProb] = sorted[0];
+
+  renderResult(topGenre, topProb, sorted, text);
+}
+
+function renderResult(genre, prob, sorted, inputText) {
+  const color  = GENRE_COLORS[genre];
+  const icon   = GENRE_ICONS[genre];
+  const pct    = (prob * 100).toFixed(1);
+
+  // Extract "interesting" tokens
+  const tokens = inputText.toLowerCase().replace(/[^a-z\s]/g," ").split(/\s+/).filter(w=>w.length>3&&!STOPWORDS.has(w));
+  const genreKws = new Set(GENRE_KEYWORDS[genre] || []);
+  const highlighted = [...new Set(tokens)].slice(0, 20);
+
+  const probBars = sorted.map(([ g, p ], i) => {
+    const c = GENRE_COLORS[g];
+    const w = (p * 100).toFixed(1);
+    return `
+      <div class="prob-row ${i===0?'top-genre':''}">
+        <span class="prob-name">${GENRE_ICONS[g]} ${g}</span>
+        <div class="prob-track">
+          <div class="prob-fill" style="width:${w}%;background:${c};
+            transition-delay:${i*0.05}s"></div>
+        </div>
+        <span class="prob-pct">${w}%</span>
+      </div>`;
+  }).join("");
+
+  const kwHTML = highlighted.map((w, i) => {
+    const isKey = genreKws.has(w);
+    const style = isKey
+      ? `background:${color}22;border:1px solid ${color}55;color:${color};animation-delay:${i*0.04}s`
+      : `background:var(--surface);border:1px solid var(--border);color:var(--muted);animation-delay:${i*0.04}s`;
+    return `<span class="kw-tag" style="${style}">${w}</span>`;
+  }).join("");
+
+  document.getElementById("result-content").innerHTML = `
+    <div style="margin-bottom:1rem">
+      <div class="genre-badge" style="background:${color}1a;border:2px solid ${color};color:${color}">
+        ${icon} ${genre}
+      </div>
+      <div class="confidence-label">Model Confidence</div>
+      <div class="conf-bar-wrap">
+        <div class="conf-bar" style="width:0%;transition:width .8s ease;background:linear-gradient(90deg,${color},var(--blue))"></div>
+      </div>
+    </div>
+    <div class="card-title" style="margin-bottom:.6rem">Genre Probability Distribution</div>
+    <div class="prob-list">${probBars}</div>
+    <div class="card-title" style="margin-top:1.2rem;margin-bottom:.5rem">Detected Keywords
+      <span style="color:${color};font-size:.65rem;margin-left:.5rem">■ genre-relevant</span>
+    </div>
+    <div class="keyword-cloud">${kwHTML}</div>
+  `;
+
+  // animate confidence bar
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const bar = document.querySelector(".conf-bar");
+      if (bar) bar.style.width = pct + "%";
+    });
+  });
+}
+
+function clearAll() {
+  document.getElementById("plot-input").value = "";
+  document.getElementById("result-content").innerHTML = `
+    <div class="empty-state">
+      <span class="empty-icon">🎬</span>
+      Enter a plot summary and click Predict Genre
+    </div>`;
+}
+
+// ── Init ─────────────────────────────────────────
+buildSampleChips();
+buildModelTable();
+buildPipeline();
+buildKeywords();
+
+// Keyboard shortcut: Ctrl+Enter to predict
+document.getElementById("plot-input").addEventListener("keydown", e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") predict();
+});
+</script>
+</body>
+</html>
